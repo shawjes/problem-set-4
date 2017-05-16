@@ -1,7 +1,9 @@
----
+
+
+>---
 title: "Problem Set 4"
-author: "Your Name Here"
-date: "3/9/2017"
+author: "Jessica Shaw"
+date: "3/26/2017"
 output: html_document
 ---
 
@@ -28,11 +30,11 @@ You will analyze some data in the [`nihexporter`](https://github.com/jayhesselbe
 First you need to install the `nihexporter` package (and `devtools`, if you don't have it already).
 
 ```r
-# install.packages('devtools')
-devtools::install_github("jayhesselberth/nihexporter")
+#install.packages('devtools')
+#devtools::install_github("jayhesselberth/nihexporter")
 ```
 
-Read the [Overview vignette](http://jayhesselberth.github.io/nihexporter/articles/nihexporter.html) to learn the structure of the pacakge. Take a look at two tables from the package:
+Read the [Overview vignette](http://jayhesselberth.github.io/nihexporter/articles/nihexporter.html) to learn the structure of the package. Take a look at two tables from the package:
 
 ```{r overview}
 library(nihexporter)
@@ -41,25 +43,63 @@ library(broom)
 
 projects
 project_io
+help(levels)
 ```
+print(projects)
+# A tibble: 901,059 × 13
+#   application.id institute activity application.type arra.funded project.num   foa.number fiscal.year project.start
+#            <int>    <fctr>   <fctr>           <fctr>      <fctr>       <chr>       <fctr>       <int>        <date>
+# 1         6258248        CA      C06                1          NA C06CA091516 RFA-RR-00-02        2000    2000-09-22
+# 2         6033399        RR      C06                1          NA C06RR014469   PAR-99-032        2000    2000-07-01
+print(project_io)
+# A tibble: 224,899 × 4
+#   project.num n.pubs n.patents total.cost
+#         <chr>  <int>     <int>      <dbl>
+# 1  C06CA091516      1         1    1488000
+# 2  C06RR013577      1         1     329812
 
 # Problems
 
 ## Problem 1
 
-The `projects` and `project_io` tables have the `r intersect(names(projects), names(project_io))` column in common. Use this column to perform a `left_join` and identify the most expensive project for each institute. Project institutes are in the `projects` table, whereas total project costs are available in the `project_io` table. Note you will have to use the `arrange` and `slice` verbs from `dplyr`.
+The `projects` and `project_io` tables have the `r intersect(names(projects), names(project_io))` 
+#project.num
+column in common. Use this column to perform a `left_join` and identify the most expensive project for each institute. Project institutes are in the `projects` table, whereas total project costs are available in the `project_io` table. Note you will have to use the `arrange` and `slice` verbs from `dplyr`.
 
+help(left_join)
+help(arrange)
+groups(projects)
+projects_inst<-group_by(projects,institute)
+groups(projects_inst)
+attach(projects_inst)
+intersect(names(projects), names(project_io))
+intersect(names(projects_inst), names(project_io))
 ```{r problem_1, eval=FALSE}
-... %>%
-  left_join(...) %>%
-  arrange(...) %>%
-  slice(...)
+projects %>% group_by(institute) %>% 
+  left_join(., project_io, by=intersect(names(projects), names(project_io)),copy=FALSE) %>%
+  select(project.num,total.cost) %>%
+  arrange(desc(total.cost)) %>%
+  slice(1) %>%
+  arrange(desc(total.cost)) %>%
+  ungroup() %>%
+  slice(1) %>%
+  select(project.num)
 ```
+
+p1<-projects %>% group_by(institute) %>% left_join(., project_io, by=intersect(names(projects), names(project_io)),copy=FALSE) %>%
+  arrange(desc(total.cost)) %>%
+  slice(1) %>%
+  arrange(desc(total.cost))
+print(p1)
+
+npubs<-p1 %>% select(project.num,n.pubs) %>% print()
 
 ## Problem 2
 
-Create a plot that describes the change in output (number of publications) for the most expensive grant from the above list. Note that you cannot use `n.pubs` for this, as that is an aggregate count over time. You need a tbl of following structure, which you can then use to calculate the number of publications each year (hint: use `n()` in a `summarize` statement:
+Create a plot that describes the change in output (number of publications) for the most expensive grant from the above list. Note that you cannot use `n.pubs` for this, as that is an aggregate count over time. You need a tbl of following structure, which you can then use to calculate the number of publications 
+each year (hint: use `n()` in a `summarize` statement:
 
+help(summarize)
 ```{r p2_tbl}
 projects %>%
   head() %>%
@@ -69,7 +109,56 @@ projects %>%
   na.omit()
 ```
 
+  
 ```{r problem_2}
+#begin code provided
+p200<-projects %>%
+#  head() %>%
+#adding filter first for efficiency of joins
+  filter(project.num=="ZIHLM200888") %>%
+  left_join(publinks) %>%
+  left_join(publications) %>%
+#also adding back the variable n.pubs, stored in my npubs data frame, so I can check my results after summarizing
+left_join(npubs) %>%
+#code provided didn't include pub.year - must've been an oversight?
+#including pub.year instead of fiscal.year
+#removing fiscal.year and fy.cost because they're not necessary for the plot requested and they result in duplicates of each pmid
+#duplicates of each pmid means the summarize() n() by pub.year will be incorrect
+  select(project.num, pmid, pub.year, n.pubs) %>%
+  na.omit() %>%
+  arrange(pmid,pub.year) %>%
+  unique()
+#end code provided
+attach(p200)
+
+p201 <- p200 %>%
+  group_by(pub.year) %>%
+  summarize(n_pubs_yr=n()) %>%
+  print()
+
+# Note: Calculated number of publications (147) exceeds given value of n.pubs (126)...
+
+#install.packages("ggthemes")
+library(ggthemes)
+library(ggplot2)
+
+plot1<-ggplot(p201, aes(pub.year, n_pubs_yr)) + geom_bar(stat="identity") +
+  xlab("Year") + ylab("Number of publications") + theme_bw() +
+  scale_x_continuous(breaks = c(2008,2009,2010,2011,2012,2013,2014,2015),
+    labels = c("2008", "2009", "2010", "2011", "2012", "2013", "2014","2015")) +
+  labs(title="Publications per year of funding")  
+  
+plot2<-ggplot(p201, aes(x=pub.year, y=cumsum(n_pubs_yr))) + geom_line(stat="identity") +
+  xlab("Year") + ylab("Number of publications") + theme_bw() +
+  scale_x_continuous(breaks = c(2008,2009,2010,2011,2012,2013,2014,2015),2016,
+    labels = c("2008", "2009", "2010", "2011", "2012", "2013", "2014","2015")) +
+  scale_y_continuous(breaks=seq(0,150,10)) +
+  labs(title="Total publications over life of grant") +
+  geom_point() + geom_text(aes(label=cumsum(n_pubs_yr),hjust=0.25, vjust=1.25))
+
+require(gridExtra)  
+grid.arrange(plot1, plot2, ncol=2)
+
 ```
 
 ## Problem 3
@@ -77,16 +166,62 @@ projects %>%
 Use the `projects` and `clinical_studies` table to calculate how many clinical studies have been started by projects from each institute.
 
 ```{r problem_3}
+# First exploring the clinical_studies table
+clinical_studies
+arrange(clinical_studies,trial.id)
+unique(clinical_studies)
+# only one study status reported for each trial id and project number confirms that this is a report of studies at only one point in time
+levels(clinical_studies$study.status)
+## [1] "ACTIVE, NOT RECRUITING"  "AVAILABLE"               "COMPLETED"               "ENROLLING BY INVITATION" "NO LONGER AVAILABLE"    
+## [6] "NOT YET RECRUITING"      "RECRUITING"              "SUSPENDED"               "TERMINATED"              "UNKNOWN STATUS"         
+##[11] "WITHDRAWN"               "WITHHELD"               
+# I'm not sure if any of the levels above would indicate that a project was not started...
+# I'm going to assume that I should keep all statuses and just tabulate number of studies by counting trial.id.
+
+p3<-projects %>%
+  left_join(., clinical_studies, by=intersect(names(projects), names(clinical_studies)),copy=FALSE) %>%
+  group_by(institute) %>%
+  na.omit() %>%
+  select(-application.type,-arra.funded,-study.section) %>%
+  arrange(desc(project.start))
+# The latest date in the project.start column is 2015, so all of the projects in this table have previously begun; 
+# some are finished and some ongoing).
+attach(p3)
+
+p3 %>% 
+  summarize(proj_started_by_inst=n())
+
 ```
 
 ## Problem 4
 
 Calculate correlations between `total.cost` and `n.pubs` for each institute. You will need to `join` the `projects` and `project_io` tables to link `institute` with `total.cost` and `n.pubs`. You will then need to use `group_by` and `do` from `dplyr` and `tidy` from `broom` to calculate correlations.
 
-```{r problem_2, eval=FALSE}
-tab %>%
-  group_by(...) %>%
-  do(tidy(cor(..., ...)))
+```{r problem_4, eval=FALSE}
+
+head(projects) # Contains institute, project.number
+head(project_io) # Contains project.num, total.cost, n.pubs
+is.numeric(project_io$n.pubs)
+
+library(dplyr)
+library(broom)
+
+p4<-projects %>%
+  dplyr::left_join(., project_io, by="project.num",copy=FALSE) %>%
+  ungroup() %>%
+  dplyr::group_by(institute) %>%
+  select(project.num,n.pubs,total.cost) %>%
+  dplyr::summarize(cor(n.pubs,total.cost,use="pairwise.complete.obs"))
+
+# For some reason this code isn't working for me...
+#p4<-projects %>%
+#  dplyr::inner_join(., project_io, by="project.num",copy=FALSE) %>%
+#  dplyr::group_by(institute) %>%
+#  select(institute,n.pubs,total.cost) %>%
+#  arrange() %>%
+#  unique() %>%
+#  attach() %>%
+#  do(tidy(cor(n.pubs,total.cost)))
 ```
 
 ## Problem 5 (extra credit)
@@ -98,6 +233,17 @@ Correlate [`rcr`](https://icite.od.nih.gov/) values from the `publications` tabl
 - type of grant (e.g. R01, P01, R21, etc.). 
 
 ```{r extra_credit}
+library(dplyr)
+model<-projects %>%
+  dplyr::left_join(., project_io, by="project.num",copy=FALSE) %>%
+  ungroup() %>%
+  select(-application.id, application.type,arra.funded,foa.number)
+
+help(lme)
+library(nlme)
+fit<-lme(n.pubs ~ institute + total.cost, data=model, na.action=na.exclude)
+summary(fit)
+dplyr::summarize(cor(n.pubs,total.cost,use="pairwise.complete.obs"))
 ```
 
 ## Problem 6 (extra extra credit)
