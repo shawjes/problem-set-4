@@ -37,7 +37,11 @@ First you need to install the `nihexporter` package (and `devtools`, if you don'
 Read the [Overview vignette](http://jayhesselberth.github.io/nihexporter/articles/nihexporter.html) to learn the structure of the package. Take a look at two tables from the package:
 
 ```{r overview}
+#install.packages("devtools")
+library(devtools)
+#devtools::install_github("jayhesselberth/nihexporter")
 library(nihexporter)
+#install.packages("tidyverse")
 library(tidyverse)
 library(broom)
 
@@ -84,7 +88,9 @@ projects %>% group_by(institute) %>%
   ungroup() %>%
   slice(1) %>%
   select(project.num)
-```
+
+
+
 
 p1<-projects %>% group_by(institute) %>% left_join(., project_io, by=intersect(names(projects), names(project_io)),copy=FALSE) %>%
   arrange(desc(total.cost)) %>%
@@ -93,6 +99,8 @@ p1<-projects %>% group_by(institute) %>% left_join(., project_io, by=intersect(n
 print(p1)
 
 npubs<-p1 %>% select(project.num,n.pubs) %>% print()
+attach(npubs)
+```
 
 ## Problem 2
 
@@ -111,6 +119,16 @@ projects %>%
 
   
 ```{r problem_2}
+
+p1<-projects %>% group_by(institute) %>% left_join(., project_io, by=intersect(names(projects), names(project_io)),copy=FALSE) %>%
+  arrange(desc(total.cost)) %>%
+  slice(1) %>%
+  arrange(desc(total.cost))
+print(p1)
+
+npubs<-p1 %>% select(project.num,n.pubs) %>% print()
+attach(npubs)
+
 #begin code provided
 p200<-projects %>%
 #  head() %>%
@@ -213,15 +231,23 @@ p4<-projects %>%
   select(project.num,n.pubs,total.cost) %>%
   dplyr::summarize(cor(n.pubs,total.cost,use="pairwise.complete.obs"))
 
-# For some reason this code isn't working for me...
-#p4<-projects %>%
-#  dplyr::inner_join(., project_io, by="project.num",copy=FALSE) %>%
-#  dplyr::group_by(institute) %>%
-#  select(institute,n.pubs,total.cost) %>%
-#  arrange() %>%
-#  unique() %>%
-#  attach() %>%
-#  do(tidy(cor(n.pubs,total.cost)))
+class(projects)
+projects.df<-as.data.frame(projects)
+class(projects.df)
+project_io.df<-as.data.frame(project_io)
+class(project_io.df)
+
+require(dplyr)
+p4<-dplyr::inner_join(projects.df, project_io.df, by="project.num", copy=FALSE)
+
+p401<-as.data.frame(group_by(p4,institute)) %>%
+  select(institute,n.pubs,total.cost) %>%
+  arrange() %>%
+  unique() 
+
+class(p401) # class "environment" -> now a df
+p401 %>% do(tidy(cor(n.pubs,total.cost)))
+
 ```
 
 ## Problem 5 (extra credit)
@@ -234,21 +260,68 @@ Correlate [`rcr`](https://icite.od.nih.gov/) values from the `publications` tabl
 
 ```{r extra_credit}
 library(dplyr)
+ec.rcr<-filter(publications,rcr>=0)
+head(ec.rcr)
+ec.rcr<-as.data.frame(ec.rcr[order(pmid),])
+attach(ec.rcr)
+```
+help(inner_join)
+class(publications$pmid)
+class(ec.rcr$pmid)
+#inner_join(publications,ec.rcr,by=pmid)
+
+
+head(publications,n=2)
 model<-projects %>%
   dplyr::left_join(., project_io, by="project.num",copy=FALSE) %>%
   ungroup() %>%
   select(-application.id, application.type,arra.funded,foa.number)
 
-help(lme)
 library(nlme)
 fit<-lme(n.pubs ~ institute + total.cost, data=model, na.action=na.exclude)
 summary(fit)
 dplyr::summarize(cor(n.pubs,total.cost,use="pairwise.complete.obs"))
-```
+
 
 ## Problem 6 (extra extra credit)
 
 Use [`gganimate`](https://github.com/dgrtwo/gganimate) to illustrate the change in cost of R01s for a few institutes over time.
 
-```{r extra_extra_credit}
+I couldn't get the necessary software installed on my laptop to do the animation. Here's a consolation prize...
+
+```{r extra_extra_credit, echo=TRUE}
+#devtools::install_github("dgrtwo/gganimate")
+#install.packages("gapminder")
+library(gapminder)
+library(ggplot2)
+library(gganimate)
+theme_set(theme_bw())
+
+model<-projects %>%
+  dplyr::left_join(., project_io, by="project.num",copy=FALSE) %>%
+  ungroup() %>%
+  select(-application.id, application.type,arra.funded,foa.number)
+
+head(as.data.frame(model))
+
+R01<-filter(ungroup(model),activity=="R01")
+head(R01)
+groups(R01)
+help(group_by)
+R01.grp<-group_by(R01,institute,fiscal.year)
+avgcost.time<-as.data.frame(summarize(R01.grp,
+              mean.cost=mean(fy.cost,na.rm=T)))
+attach(avgcost.time)
+groups(R01.grp)
+avgcost.time
+
+p <- ggplot(avgcost.time, 
+            aes(fiscal.year,mean.cost,frame=fiscal.year,
+            colour=institute)) +
+            #scale_x_log10() +
+            geom_smooth(method="loess",se=F)
+p
+
+#gganimate(p) #Errors galore :(
+
 ```
